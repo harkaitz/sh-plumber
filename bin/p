@@ -1,0 +1,158 @@
+#!/bin/sh -e
+#L:
+#L:  MIT License
+#L:  
+#l:  Bug reports, feature requests to gemini|https://harkadev.com/oss
+#l:  Copyright (c) 2022 Harkaitz Agirre, harkaitz.aguirre@gmail.com
+#L:
+#L:  Permission is hereby granted, free of charge, to any person obtaining
+#L:  a copy of this software and associated documentation files (the
+#L:  "Software"), to deal in the Software without restriction, including
+#L:  without limitation the rights to use, copy, modify, merge, publish,
+#L:  distribute, sublicense, and/or sell copies of the Software, and to
+#L:  permit persons to whom the Software is furnished to do so, subject to
+#L:  the following conditions:
+#L:
+#L:  The above copyright notice and this permission notice shall be
+#L:  included in all copies or substantial portions of the Software.
+#L:
+#L:  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+#L:  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+#L:  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+#L:  NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+#L:  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+#L:  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+#L:  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+##:
+#h: Usage: $0 [TEXT (default from clipboard)]
+#h:
+#h: "P" is a plumber implementation implemented using the Standard Posix
+#h: Shell language. Programs that want to provide plumbing should create
+#h: an script with the following interface:
+#h:
+#h:     > p_PROGRAM plumbs TEXT : Print help if it can handle it.
+#h:     > p_PROGRAM TEXT        : Handle text.
+#h:
+#h: "P" will set the "P_MODE" environment variable to:
+#h:
+#h:     - term    : The program is being executed with a terminal.
+#h:     - display : The program is executed from a GUI.
+#h:     - log     : The program is being executed without terminal or GUI.
+#h:
+#h: "P" will set the "P_PROG" to the program name in focus.
+##:
+. p_menu
+if test -f /etc/hprofile; then
+    . /etc/hprofile
+fi
+p() {
+    ## Avoid loops.
+    export P_PLUMB=y
+    ## Get text.
+    if test -n "$*"; then
+        local text="$*"
+    elif which xclip >/dev/null 2>&1; then
+        local text="`xclip -o -`"
+    else
+        return 1
+    fi
+    ## No text, no action.
+    if test ! -n "${text}"; then
+        local text="`p_type`"
+    fi
+    ## Select operation.
+    while true; do
+        local bytes="`printf '%s' "${text}" | wc -c`" 
+        local sel="`p_print_menu "${text}" | p_menu "[${P_PROG}](${bytes}Bytes)"`"
+        case "${sel}" in
+            q|'') return 0           ;;
+            v) p_view "${text}"      ;;
+            t) local text="`p_type`" ;;
+            *) local prog="`which "p_${sel}" 2>/dev/null || true`"
+               if test ! -n "${prog}"; then
+                   local text="${sel}"
+               elif env "${prog}" "${text}" 2>&1 | tee "${P_LOGFILE}"; then
+                   return 0
+               elif test ! -n "${P_PLUMB}"; then
+                   p "${P_LOGFILE}"
+                   return 1
+               else
+                   return 1
+               fi;;
+        esac
+    done
+}
+p_calc_variables() {
+    if test -n "${P_MODE}"; then
+        export P_MODE
+    elif test -t 0; then
+        export P_MODE="term"
+    elif test -n "${DISPLAY}" && which "dmenu" >/dev/null 2>&1; then
+        export P_MODE="display"
+    else
+        export P_MODE="log"
+    fi
+    if test @"${P_MODE}" = @"display" && which xdotool readlink xargs >/dev/null 2>&1; then
+        export P_WINDOW="`xdotool getwindowfocus`"
+        export P_PID="`xdotool getwindowpid "${P_WINDOW}"`"
+        export P_PROG="`readlink /proc/${P_PID}/exe | xargs basename`"
+    else
+        export P_WINDOW=""
+        export P_PID=""
+        export P_PROG=""
+    fi
+    mkdir -p "${HOME}/.log"
+    P_LOGFILE="${HOME}/.log/p.log"
+}
+## -----------------------------------------------------------------------------
+p_print_progs() {
+    local d=
+    printf '%s\n' "${PATH}" | tr ':' '\n' | while read -r d; do
+        if test -d "${d}"; then
+            find "${d}"            \
+                 -maxdepth 1       \
+                 -mindepth 1       \
+                 -executable       \
+                 -iregex '.*/p_.*'
+        fi
+    done
+}
+p_print_menu() {
+    local l= p=
+    printf '%-20s : %s\n' "q" "Cancel operation."
+    if test -n "${1}"; then
+        printf '%-20s : %s\n' "v" "View selection."
+    fi
+    printf '%-20s : %s\n' "t" "Type selection."
+    p_print_progs | while read -r p; do
+        local n="`basename "${p}" | sed 's|^p_||'`"
+        "${p}" plumbs "${1}" | if read -r l; then
+            printf '%-20s : %s\n' "${n}" "${l}"
+        fi
+    done
+}
+p_view() {
+    local t="${1:-Empty text.}"
+    case "${P_MODE}" in
+        term|log) printf '%s\n' "${t}"                        ;;
+        display)  printf '%s\n' "${t}" | dmenu -l 1 -p "text" ;;
+    esac
+}
+p_type() {
+    case "${P_MODE}" in
+        term|log) echo -n "Type new text> " >&2; read -r text; printf '%s\n' "${text}" ;;
+        display)  dmenu -p "Type new text"              ;;
+    esac
+}
+## -----------------------------------------------------------------------------
+p_calc_variables
+SCRNAME="`basename "$0"`"
+if test @"${SCRNAME}" = @"p"; then
+    case "${1}" in
+        -h|--help)
+            sed -n 's/^ *#h: \{0,1\}//p' "$0" | sed "s|\\\$0|${SCRNAME}|g"
+            echo ""
+            sed -n 's/^ *#l: \{0,2\}//p' "$0" ;;
+        *)  p "$@";;
+    esac
+fi
