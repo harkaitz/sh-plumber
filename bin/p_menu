@@ -32,7 +32,9 @@ p_menu() {
     local prompt="$1" menu="`cat`" sel=
     if test -t 2; then
         if which slmenu >/dev/null 2>&1; then
+            clear >&2
             sel="`printf '%s\n' "${menu}" | slmenu -l 10 -p "${prompt}" | sed 's| *:[^/].*||'`"
+            clear >&2
         else
             printf '%s\n%s> ' "${menu}" "${prompt}" >&2
             read sel < /dev/tty

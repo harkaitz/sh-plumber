@@ -39,7 +39,7 @@
 #h:     - display : The program is executed from a GUI.
 #h:     - log     : The program is being executed without terminal or GUI.
 #h:
-#h: "P" will set the "P_PROG" to the program name in focus.
+#h: "P" will set "${P_PROG}" to the program name in focus.
 ##:
 . p_menu
 if test -f /etc/hprofile; then
@@ -61,26 +61,31 @@ p() {
         local text="`p_type`"
     fi
     ## Select operation.
+    local pwd="`pwd`" ret='0'
+    if test -n "${P_PWD}"; then
+        cd "${P_PWD}"
+    fi
     while true; do
         local bytes="`printf '%s' "${text}" | wc -c`" 
-        local sel="`p_print_menu "${text}" | p_menu "[${P_PROG}](${bytes}Bytes)"`"
+        local sel="`p_print_menu "${text}" | p_menu "[${P_PWD}][${P_PROG}](${bytes}Bytes)"`"
         case "${sel}" in
-            q|'') return 0           ;;
-            v) p_view "${text}"      ;;
-            t) local text="`p_type`" ;;
-            *) local prog="`which "p_${sel}" 2>/dev/null || true`"
-               if test ! -n "${prog}"; then
-                   local text="${sel}"
-               elif env "${prog}" "${text}" 2>&1 | tee "${P_LOGFILE}"; then
-                   return 0
-               elif test ! -n "${P_PLUMB}"; then
-                   p "${P_LOGFILE}"
-                   return 1
-               else
-                   return 1
-               fi;;
+            q|'') break                 ;;
+            v)    p_view "${text}"      ;;
+            *)    local prog="`which "p_${sel}" 2>/dev/null || true`"
+                  if test ! -n "${prog}"; then
+                      local text="${sel}"
+                  elif env "${prog}" "${text}" 2>&1 | tee "${P_LOGFILE}"; then
+                      break
+                  elif test ! -n "${P_PLUMB}"; then
+                      p "${P_LOGFILE}"
+                      break
+                  else
+                      break
+                  fi;;
         esac
     done
+    cd "${pwd}"
+    return "${ret}"
 }
 p_calc_variables() {
     if test -n "${P_MODE}"; then
@@ -92,14 +97,22 @@ p_calc_variables() {
     else
         export P_MODE="log"
     fi
-    if test @"${P_MODE}" = @"display" && which xdotool readlink xargs >/dev/null 2>&1; then
+    if test -n "${DISPLAY}" && which xdotool readlink xargs >/dev/null 2>&1; then
         export P_WINDOW="`xdotool getwindowfocus`"
         export P_PID="`xdotool getwindowpid "${P_WINDOW}"`"
         export P_PROG="`readlink /proc/${P_PID}/exe | xargs basename`"
+        case "${P_PROG}" in # Get the shell when in a console.
+            xterm|st)
+                P_PID="`ps -o ppid,pid -A | sed -n "s|^ *${P_PID} *||p" | head -n 1`"
+                P_PROG="`readlink /proc/${P_PID}/exe | xargs basename`"
+                ;;
+        esac
+        export P_PWD="` readlink /proc/${P_PID}/cwd`"
     else
         export P_WINDOW=""
         export P_PID=""
         export P_PROG=""
+        export P_PWD="`pwd`"
     fi
     mkdir -p "${HOME}/.log"
     P_LOGFILE="${HOME}/.log/p.log"
@@ -123,7 +136,6 @@ p_print_menu() {
     if test -n "${1}"; then
         printf '%-20s : %s\n' "v" "View selection."
     fi
-    printf '%-20s : %s\n' "t" "Type selection."
     p_print_progs | while read -r p; do
         local n="`basename "${p}" | sed 's|^p_||'`"
         "${p}" plumbs "${1}" | if read -r l; then
@@ -135,13 +147,7 @@ p_view() {
     local t="${1:-Empty text.}"
     case "${P_MODE}" in
         term|log) printf '%s\n' "${t}"                        ;;
-        display)  printf '%s\n' "${t}" | dmenu -l 1 -p "text" ;;
-    esac
-}
-p_type() {
-    case "${P_MODE}" in
-        term|log) echo -n "Type new text> " >&2; read -r text; printf '%s\n' "${text}" ;;
-        display)  dmenu -p "Type new text"              ;;
+        display)  printf '%s\n' "${t}" | dmenu -l 10 -p "text" ;;
     esac
 }
 ## -----------------------------------------------------------------------------

@@ -24,30 +24,60 @@
 #L:  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 #L:  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ##:
-#h: Usage: $0 [plumbs] FILE|URL
-p_open() {
-    mkdir -p ~/.log
-    case "${1}" in
-        *://*) nohup "${P_BROWSER:-xdg-open}" "${1}" > ~/.log/p_open.log 2>&1 &;;
-        *)     nohup xdg-open "$@"                   > ~/.log/p_open.log 2>&1 &;;
+#h: Usage: $0 [-show|DIRECTORY|FILENAME]
+##:
+p_shell() {
+    local cmd="$1" pwd="`pwd`"
+    shift
+    case "${cmd}" in
+        -show) p_shell_show_variables ;;
+        *)     if test -d "${cmd}"; then
+                   cd "${cmd}"
+                   mkdir -p ~/.log
+                   nohup "${P_TERMINAL}" -e "${P_SHELL}" > ~/.log/p_shell.log 2>&1 &
+                   cd "${pwd}"
+               elif test -e "${cmd}"; then
+                   cd "`dirname "${cmd}"`"
+                   mkdir -p ~/.log
+                   nohup "${P_TERMINAL}" -e "${P_SHELL}" > ~/.log/p_shell.log 2>&1 &
+                   cd "${pwd}"
+               fi
+               ;;
     esac
 }
+p_shell_show_variables() {
+    printf '%-20s : %s\n'             \
+           P_TERMINAL "${P_TERMINAL}" \
+           P_SHELL    "${P_SHELL}"
+}
+p_shell_calc_variables() {
+    P_TERMINAL="${P_TERMINAL:-st}"
+    P_SHELL="${P_SHELL:-bash}"
+}
+## -----------------------------------------------------------------------------
+
+
+## -----------------------------------------------------------------------------
+p_shell_calc_variables
 SCRNAME="`basename "$0"`"
-if test @"${SCRNAME}" = @"p_open";then
+if test @"${SCRNAME}" = @"p_shell";then
     case "${1}" in
-        -h|--help)
+        ''|-h|--help)
             sed -n 's/^ *#h: \{0,1\}//p' "$0" | sed "s|\\\$0|${SCRNAME}|g"
             echo ""
             sed -n 's/^ *#l: \{0,2\}//p' "$0"
             ;;
         plumbs)
-            case "${2}" in
-                *://*) echo 'Open with the browser.'                         ;;
-                *)     test ! -e "$2" || echo 'Open with `xdg-open` (file).' ;;
-            esac
+            if test ! @"${P_MODE}" = @"display"; then
+                true
+            elif test -d "${2}"; then
+                echo "Open directory on the terminal."
+            elif test -ex "${2}"; then
+                echo "Open a shell in '`dirname "${2}"`'."
+            fi
             ;;
         *)
-            p_open "$@"
+            p_shell "$@"
             ;;
     esac
 fi
