@@ -25,6 +25,7 @@
 #L:  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ##:
 #h: Usage: $0 MESSAGE
+. p
 p_show() {
     case "${P_MODE:-term}" in
         term|log) printf '%s\n' "$*" >&2   ;;

@@ -1,0 +1,171 @@
+#!/bin/sh -e
+#L:
+#L:  MIT License
+#L:  
+#l:  Bug reports, feature requests to gemini|https://harkadev.com/oss
+#l:  Copyright (c) 2022 Harkaitz Agirre, harkaitz.aguirre@gmail.com
+#L:
+#L:  Permission is hereby granted, free of charge, to any person obtaining
+#L:  a copy of this software and associated documentation files (the
+#L:  "Software"), to deal in the Software without restriction, including
+#L:  without limitation the rights to use, copy, modify, merge, publish,
+#L:  distribute, sublicense, and/or sell copies of the Software, and to
+#L:  permit persons to whom the Software is furnished to do so, subject to
+#L:  the following conditions:
+#L:
+#L:  The above copyright notice and this permission notice shall be
+#L:  included in all copies or substantial portions of the Software.
+#L:
+#L:  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+#L:  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+#L:  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+#L:  NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+#L:  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+#L:  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+#L:  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+##:
+#h: Usage:
+#h: $0 [TEXT]
+#h: $0 add SLOT NAME <<< TEXT
+#h: $0 del SLOT
+##:
+. p
+. p_menu
+. p_query
+. clip
+p_mem() {
+    local mask="`umask`"
+    umask 0077
+    case "${1}" in
+        add) shift; p_mem_add    "$@" ;;
+        del) shift; p_mem_delete "$@" ;;
+        *)          p_mem_ctl    "$@" ;;
+    esac
+    umask "${mask}"
+}
+p_mem_add() {
+    local slot='' name=''
+    case "${1}" in
+        1|2|3|4|5|6|7|8)
+            slot="${1}"
+            shift
+            ;;
+        *)  echo "p_mem: error: Invalid add argument: ${slot}" >&2
+            return 1
+            ;;
+    esac
+    case "${1}" in
+        '') echo "p_mem: error: Please specify a name." >&2
+            return 1
+            ;;
+        *)  name="${1}"
+            shift
+            ;;
+    esac
+    mkdir -p "${P_MEM_DIR}/${slot}"
+    printf '%s' "${name}" > "${P_MEM_DIR}/${slot}/name"
+    cat                   > "${P_MEM_DIR}/${slot}/data"
+}
+p_mem_ctl() {
+    local slot='' cmd=''
+    slot="`p_mem_menu_slots | p_menu 'Slot'`"
+    case "${slot}" in
+        1|2|3|4|5|6|7|8) true;;
+        *)               return 1;;
+    esac
+    cmd="`p_mem_menu_cmds "${slot}" | p_menu 'Command'`"
+    case "${cmd}" in
+        plumb)  p_mem_plumb  "${slot}" ;;
+        view)   p_mem_view   "${slot}" ;;
+        copy)   p_mem_copy   "${slot}" ;;
+        delete) p_mem_delete "${slot}" ;;
+        paste)  p_mem_paste  "${slot}" ;;
+    esac
+}
+p_mem_menu_slots() {
+    local n='' d='' name='' bytes=''
+    for n in `seq 1 8`; do
+        d="${P_MEM_DIR}/${n}"
+        if test -e "${d}/name"; then
+            name="`cat "${d}/name"`"
+        else
+            name=""
+        fi
+        if test -e "${d}/data"; then
+            bytes="`wc -c < "${d}/data"`"
+        else
+            bytes="0"
+        fi
+        case "${name}"@@"${bytes}" in
+            ''@@'0') name="Empty slot."               ;;
+            ''@@*)   name="${bytes} bytes."           ;;
+             *@@'0') name="${name} (Empty)."          ;;
+             *@@*)   name="${name} (${bytes} bytes)." ;;
+        esac
+        printf '%s : %s\n' "${n}" "${name}"
+    done
+}
+p_mem_menu_cmds() {
+    local b="`clip % | wc -c`"
+    if test -e "${P_MEM_DIR}/${1}/data"; then
+        echo "plumb  : Launch the plumber."
+        echo "view   : View the contents."
+        echo "copy   : Copy contents to the clipboard."
+        echo "delete : Delete the contents."
+    fi
+    if test ! @"${b}" = "0"; then
+        echo "paste  : Save ${b} bytes."
+    fi
+}
+p_mem_plumb() {
+    if test -e "${P_MEM_DIR}/${1}/data"; then
+        p "`cat "${P_MEM_DIR}/${1}/data"`"
+    fi
+}
+p_mem_view() {
+    if test -e "${P_MEM_DIR}/${1}/data"; then
+        p_show "`cat "${P_MEM_DIR}/${1}/data"`"
+    else
+        p_show "(Empty)"
+    fi
+}
+p_mem_copy() {
+    if test -e "${P_MEM_DIR}/${1}/data"; then
+        clip "${P_MEM_DIR}/${1}/data"
+    else
+        clip - < /dev/null
+    fi
+}
+p_mem_delete() {
+    rm -f "${P_MEM_DIR}/${1}/name" "${P_MEM_DIR}/${1}/data"
+}
+p_mem_paste() {
+    mkdir -p "${P_MEM_DIR}/${1}"
+    local n="`p_query "Name (Optional)"`"
+    if test -n "${n}"; then
+        printf '%s' "${n}" > "${P_MEM_DIR}/${1}/name"
+    else
+        rm -f "${P_MEM_DIR}/${1}/name"
+    fi
+    clip % > "${P_MEM_DIR}/${1}/data"
+}
+## -----------------------------------------------------------------------------
+P_MEM_DIR="/dev/shm/p_mem"
+SCRNAME="`basename "$0"`"
+if test @"${SCRNAME}" = @"p_mem";then
+    case "${1}" in
+        -h|--help)
+            sed -n 's/^ *#h: \{0,1\}//p' "$0" | sed "s|\\\$0|${SCRNAME}|g"
+            echo ""
+            sed -n 's/^ *#l: \{0,2\}//p' "$0"
+            ;;
+        plumbs)
+            if test -e /dev/shm; then
+                echo "Manage shared memory."
+            fi
+            ;;
+        *)
+            p_mem "$@"
+            ;;
+    esac
+fi

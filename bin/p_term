@@ -1,0 +1,113 @@
+#!/bin/sh -e
+#L:
+#L:  MIT License
+#L:  
+#l:  Bug reports, feature requests to gemini|https://harkadev.com/oss
+#l:  Copyright (c) 2022 Harkaitz Agirre, harkaitz.aguirre@gmail.com
+#L:
+#L:  Permission is hereby granted, free of charge, to any person obtaining
+#L:  a copy of this software and associated documentation files (the
+#L:  "Software"), to deal in the Software without restriction, including
+#L:  without limitation the rights to use, copy, modify, merge, publish,
+#L:  distribute, sublicense, and/or sell copies of the Software, and to
+#L:  permit persons to whom the Software is furnished to do so, subject to
+#L:  the following conditions:
+#L:
+#L:  The above copyright notice and this permission notice shall be
+#L:  included in all copies or substantial portions of the Software.
+#L:
+#L:  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+#L:  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+#L:  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+#L:  NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+#L:  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+#L:  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+#L:  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+##:
+#h: Usage: $0 [plumbs|show|DIR|COMMAND]
+#h:
+#h: Open a terminal.
+. p
+. p_show
+p_term() {
+    case "${P_MODE:-display}" in
+        display)
+            if test ! -n "${TERMINAL}"; then
+                p_show "Can't find a terminal emulator."
+                return 1
+            elif test ! -n "${SHELL}"; then
+                p_show "Can't find a shell interpreter."
+                return 1
+            fi
+            ${P_TERM_ENV:-env} ${TERMINAL} ${SHELL} ${1:+ -c '"$@"' -- "$@" }
+            ;;
+        *)
+            if test ! -n "${SHELL}"; then
+                p_show "Can't find a shell interpreter."
+                return 1
+            fi
+            ${P_TERM_ENV:-env} ${SHELL} ${1:+ -c '"$@"' -- "$@" }
+            ;;
+        
+    esac
+}
+p_term_show_variables() {
+    printf '%-20s : %s\n'                       \
+           TERMINAL_LIST   "${TERMINAL_LIST}"   \
+           TERMINAL_SHELLS "${TERMINAL_SHELLS}" \
+           TERMINAL        "${TERMINAL}"        \
+           SHELL           "${SHELL}"
+}
+p_term_calc_variables() {
+    local terminal='' shell=''
+    TERMINAL_LIST="${TERM_LIST:-st xterm}"
+    TERMINAL_SHELLS="${TERMINAL_SHELLS:-bash sh}"
+    # [Help needed] Put here your terminals and shells.
+    if test ! -n "${TERMINAL}"; then
+        terminal="`{ which ${TERMINAL_LIST} 2>/dev/null | head -n 1; } || true`"
+        case "${terminal}" in
+            '')      TERMINAL='';;
+            *xterm*) TERMINAL="${terminal} -fg white -bg black -fa Monospace -fs 12 -e";;
+            *)       TERMINAL="${terminal} -e";;
+        esac
+    fi
+    if test ! -n "${TERMINAL_SHELL}"; then
+        shell="`{ which ${TERMINAL_SHELLS} 2>/dev/null | head -n 1; } || true`"
+        case "${shell}" in
+            '')     SHELL=''            ;;
+            *bash*) SHELL="${shell} -l" ;;
+        esac
+    fi
+}
+
+## -----------------------------------------------------------------------------
+p_term_calc_variables
+SCRNAME="`basename "$0"`"
+if test @"${SCRNAME}" = @"p_term";then
+    case "${1}" in
+        -h|--help)
+            sed -n 's/^ *#h: \{0,1\}//p' "$0" | sed "s|\\\$0|${SCRNAME}|g"
+            echo ""
+            sed -n 's/^ *#l: \{0,2\}//p' "$0"
+            ;;
+        show)
+            p_term_show_variables
+            ;;
+        plumbs)
+            if test ! -n "$2"; then
+                echo "Open new terminal in `pwd`"
+            elif test -d "$2"; then
+                echo "Open terminal in ${2}."
+            fi
+            ;;
+        *)
+            P_TERM_ENV=exec
+            if test -d "${1}"; then
+                cd "${1}"
+                p_term
+            else
+                p_term "$@"
+            fi
+            ;;
+    esac
+fi

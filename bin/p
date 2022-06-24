@@ -69,15 +69,13 @@ p() {
         local bytes="`printf '%s' "${text}" | wc -c`" 
         local sel="`p_print_menu "${text}" | p_menu "[${P_PWD}][${P_PROG}](${bytes}Bytes)"`"
         case "${sel}" in
-            q|'') break                 ;;
+            '')   break                 ;;
+            c)    text=''               ;;
             v)    p_view "${text}"      ;;
             *)    local prog="`which "p_${sel}" 2>/dev/null || true`"
                   if test ! -n "${prog}"; then
                       local text="${sel}"
-                  elif env "${prog}" "${text}" 2>&1 | tee "${P_LOGFILE}"; then
-                      break
-                  elif test ! -n "${P_PLUMB}"; then
-                      p "${P_LOGFILE}"
+                  elif env "${prog}" "${text}" 2>&1; then
                       break
                   else
                       break
@@ -97,7 +95,9 @@ p_calc_variables() {
     else
         export P_MODE="log"
     fi
-    if test -n "${DISPLAY}" && which xdotool readlink xargs >/dev/null 2>&1; then
+    if test -n "${P_WINDOW}"; then
+        true
+    elif test -n "${DISPLAY}" && which xdotool readlink xargs >/dev/null 2>&1; then
         export P_WINDOW="`xdotool getwindowfocus`"
         export P_PID="`xdotool getwindowpid "${P_WINDOW}"`"
         export P_PROG="`readlink /proc/${P_PID}/exe | xargs basename`"
@@ -114,8 +114,6 @@ p_calc_variables() {
         export P_PROG=""
         export P_PWD="`pwd`"
     fi
-    mkdir -p "${HOME}/.log"
-    P_LOGFILE="${HOME}/.log/p.log"
 }
 ## -----------------------------------------------------------------------------
 p_print_progs() {
@@ -132,9 +130,10 @@ p_print_progs() {
 }
 p_print_menu() {
     local l= p=
-    printf '%-20s : %s\n' "q" "Cancel operation."
     if test -n "${1}"; then
-        printf '%-20s : %s\n' "v" "View selection."
+        printf '%-20s : %s\n' \
+               "c" "Clear selection." \
+               "v" "View selection."
     fi
     p_print_progs | while read -r p; do
         local n="`basename "${p}" | sed 's|^p_||'`"
