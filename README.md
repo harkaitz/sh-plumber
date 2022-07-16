@@ -4,6 +4,16 @@ Plumbing implementation for GNU/Linux, see [Plan9 Plumber](https://en.wikipedia.
 
 ## Help
 
+clip
+
+    Usage: clip FILE|-|%
+    
+    Put text in X clipboards (clipboard/primary/secondary).
+    
+    -    : Read from standard input.
+    FILE : Read from file.
+    %    : Print the selection.
+
 p
 
     Usage: p [TEXT (default from clipboard)]
@@ -23,6 +33,19 @@ p
     
     "P" will set "${P_PROG}" to the program name in focus.
 
+p_edit
+
+    Usage: p_edit [plumbs|show|FILE]
+    
+    Open file with a text editor.
+
+p_mem
+
+    Usage:
+    p_mem [TEXT]
+    p_mem add SLOT NAME <<< TEXT
+    p_mem del SLOT
+
 p_menu
 
     Usage: p_menu PROMPT <<EOF: Print a menu and select an item.
@@ -38,13 +61,15 @@ p_query
 
     Usage: p_query PROMPT : Ask the user.
 
-p_shell
-
-    Usage: p_shell [-show|DIRECTORY|FILENAME]
-
 p_show
 
     Usage: p_show MESSAGE
+
+p_term
+
+    Usage: p_term [plumbs|show|DIR|COMMAND]
+    
+    Open a terminal.
 
 ## Collaborating
 
